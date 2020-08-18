@@ -1,0 +1,7 @@
+{
+  "name": "com.strawlink.scene-navigator",
+  "displayName": "Scene Navigator",
+  "version": "0.1.0",
+  "unity": "2019.3",
+  "description": "Scene Navigator provides an editor-only utility window that helps navigate large hierarchies."
+}
