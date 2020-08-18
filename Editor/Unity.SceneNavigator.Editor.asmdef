@@ -1,3 +1,15 @@
-﻿{
-	"name": "Unity.SceneNavigator.Editor"
+{
+    "name": "Unity.SceneNavigator.Editor",
+    "references": [
+        "GUID:6f0db1c9728595f47a5726b8052a934d"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }
