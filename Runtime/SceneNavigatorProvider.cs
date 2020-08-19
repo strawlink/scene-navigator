@@ -11,6 +11,12 @@ namespace SceneNavigator
 
 		public void Register(Object obj, string tag = "(default)")
 		{
+			// Prevent duplicate registrations
+			if (_metaData.ContainsKey(obj))
+			{
+				return;
+			}
+
 			_metaData[obj] = new SceneObjectMetaData(obj, tag);
 
 			if (_allTags.TryGetValue(tag, out var count))
@@ -27,6 +33,12 @@ namespace SceneNavigator
 
 		public void Register(Object obj, params string[] tags)
 		{
+			// Prevent duplicate registrations
+			if (_metaData.ContainsKey(obj))
+			{
+				return;
+			}
+
 			_metaData[obj] = new SceneObjectMetaData(obj, tags);
 			foreach (var tag in tags)
 			{
