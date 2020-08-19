@@ -7,7 +7,7 @@
 	using UnityEngine.Profiling;
 	using Random = System.Random;
 
-	internal class SceneNavigatorWindow : EditorWindow
+	internal class SceneNavigatorWindow : EditorWindow, ISerializationCallbackReceiver
 	{
 		[MenuItem("Window/General/Scene Navigator")]
 		public static void OpenWindow()
@@ -27,6 +27,7 @@
 			_activeProvider = SceneNavigatorSettings.provider;
 			_activeProvider.onCollectionChanged += SetRebuildFilter;
 			SetRebuildFilter();
+			LoadActiveTags();
 		}
 
 		private void OnDisable()
@@ -60,13 +61,39 @@
 		private static Styles styles => _styles ?? (_styles = new Styles());
 
 		private IReadOnlyDictionary<string,int> _tagData;
-		private readonly HashSet<string> _activeTags = new HashSet<string>();
+		private HashSet<string> _activeTags = new HashSet<string>();
+
+		private const string EditorPrefsActiveTags = "SceneNavigator_ActiveTags";
+
+		private void SaveActiveTags()
+		{
+			var serialized = string.Join(SerializationSeparatorStr, _activeTags);
+			EditorPrefs.SetString(EditorPrefsActiveTags, serialized);
+		}
+
+		private const char SerializationSeparator = '\0';
+		private const string SerializationSeparatorStr = "\0";
+
+		private void LoadActiveTags()
+		{
+			try
+			{
+				var str = EditorPrefs.GetString(EditorPrefsActiveTags, "");
+				if (!string.IsNullOrEmpty(str))
+				{
+					_activeTags = new HashSet<string>(str.Split(SerializationSeparator));
+				}
+			}
+			catch
+			{
+				// ignored
+			}
+		}
 
 		private SceneNavigatorFilterMode _tagFilterMode = SceneNavigatorFilterMode.MatchAnyTag;
 		private void OnGUI()
 		{
 			Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(OnGUI)}");
-			//TODO: Save active tags to editorprefs
 
 			if (_filteredObjects.Any(x=> x.targetObject == null) || _rebuildFilter)
 			{
@@ -119,6 +146,11 @@
 							{
 								_activeTags.Add(tag.Key);
 								_rebuildFilter = true;
+							}
+
+							if (contains != newContains)
+							{
+								SaveActiveTags();
 							}
 						}
 					}
@@ -271,6 +303,15 @@
 			{
 				GUI.color = _existingColor;
 			}
+		}
+
+		public void OnBeforeSerialize()
+		{
+		}
+
+		public void OnAfterDeserialize()
+		{
+			LoadActiveTags();
 		}
 	}
 }
