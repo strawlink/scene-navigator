@@ -1,13 +1,11 @@
 ﻿namespace SceneNavigator
 {
-	using System;
 	using System.Collections.Generic;
 	using System.Linq;
 	using UnityEditor;
 	using UnityEngine;
 	using UnityEngine.Profiling;
-	using Debug = UnityEngine.Debug;
-	using Object = UnityEngine.Object;
+	using Random = System.Random;
 
 	internal class SceneNavigatorWindow : EditorWindow
 	{
@@ -96,165 +94,167 @@
 			}
 
 			Profiler.EndSample();
+		}
 
-			void DrawTags()
+		private void DrawTags()
+		{
+			EditorGUILayout.LabelField("Tags", EditorStyles.centeredGreyMiniLabel);
+			using (var scrollScope = new GUILayout.ScrollViewScope(_tagsScrollPosition, styles.box))
 			{
-				EditorGUILayout.LabelField("Tags", EditorStyles.centeredGreyMiniLabel);
-				using (var scrollScope = new GUILayout.ScrollViewScope(_tagsScrollPosition, styles.box, GUILayout.ExpandHeight(true)))
+				_tagsScrollPosition = scrollScope.scrollPosition;
+
+				if (_allTags.Count > 0)
 				{
-					_tagsScrollPosition = scrollScope.scrollPosition;
-
-					if (_allTags.Count > 0)
+					foreach (var tag in _allTags)
 					{
-						foreach (var tag in _allTags)
-						{
-							bool contains = _activeTags.Contains(tag);
+						bool contains = _activeTags.Contains(tag);
 
-							using (new GUIColorScope(GetSeededColor(tag, contains ? 1f : .5f)))
+						using (new GUIColorScope(GetSeededColor(tag, contains ? 1f : .5f)))
+						{
+							var newContains = GUILayout.Toggle(contains, tag, styles.miniButtonLeftAlign);
+							if (contains && !newContains)
 							{
-								var newContains = GUILayout.Toggle(contains, tag, styles.miniButtonLeftAlign);
-								if (contains && !newContains)
-								{
-									_activeTags.Remove(tag);
-									_rebuildFilter = true;
-								}
-								else if (!contains && newContains)
-								{
-									_activeTags.Add(tag);
-									_rebuildFilter = true;
-								}
+								_activeTags.Remove(tag);
+								_rebuildFilter = true;
+							}
+							else if (!contains && newContains)
+							{
+								_activeTags.Add(tag);
+								_rebuildFilter = true;
 							}
 						}
 					}
-					else
+				}
+				else
+				{
+					GUILayout.Label("(empty)", styles.centeredGreyMiniLabel);
+				}
+			}
+
+			using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+			{
+				DrawToggle(SceneNavigatorFilterMode.MatchAnyTag,  "Match Any");
+				DrawToggle(SceneNavigatorFilterMode.MatchAllTags, "Match All");
+
+				void DrawToggle(SceneNavigatorFilterMode filterMode, string text)
+				{
+					bool val    = _tagFilterMode == filterMode;
+					bool newVal = GUILayout.Toggle(val, text, EditorStyles.toolbarButton);
+					if (!val && newVal)
 					{
-						GUILayout.Label("(empty)", styles.centeredGreyMiniLabel);
+						_tagFilterMode = filterMode;
+						_rebuildFilter = true;
 					}
 				}
+			}
+		}
 
-				using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+		private void DrawObjects()
+		{
+			Object isolateTarget = default;
+
+			using (var scrollScope = new EditorGUILayout.ScrollViewScope(_objectsScrollPosition, styles.box))
+			{
+				_objectsScrollPosition = scrollScope.scrollPosition;
+
+				if (_filteredObjects.Count == 0)
 				{
-					DrawToggle(SceneNavigatorFilterMode.MatchAnyTag, "Match Any");
-					DrawToggle(SceneNavigatorFilterMode.MatchAllTags, "Match All");
-
-					void DrawToggle(SceneNavigatorFilterMode filterMode, string text)
+					GUILayout.Label("(empty)", styles.centeredGreyMiniLabel);
+				}
+				else
+				{
+					foreach (var obj in _filteredObjects)
 					{
-						bool val = _tagFilterMode == filterMode;
-						bool newVal = GUILayout.Toggle(val, text, EditorStyles.toolbarButton);
-						if (!val && newVal)
+						Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(DrawEntry)}");
+						if (DrawEntry(obj))
 						{
-							_tagFilterMode = filterMode;
-							_rebuildFilter = true;
+							isolateTarget = obj;
 						}
+
+						Profiler.EndSample();
 					}
 				}
 			}
 
-			void DrawObjects()
+			if (isolateTarget)
 			{
-				Object isolateTarget = default;
+				IsolateTarget(isolateTarget);
+			}
+		}
 
-				using (var scrollScope = new EditorGUILayout.ScrollViewScope(_objectsScrollPosition, styles.box, GUILayout.ExpandHeight(true)))
+		private void RebuildFilterCollection()
+		{
+			_allTags = _activeProvider.GetAllTags();
+
+			_filteredObjects.Clear();
+			foreach (var obj in _activeProvider.GetObjects(_activeTags.ToList(), _tagFilterMode))
+			{
+				if (obj)
 				{
-					_objectsScrollPosition = scrollScope.scrollPosition;
-
-					if (_filteredObjects.Count == 0)
-					{
-						GUILayout.Label("(empty)", styles.centeredGreyMiniLabel);
-					}
-					else
-					{
-						foreach (var obj in _filteredObjects)
-						{
-							Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(DrawEntry)}");
-							if (DrawEntry(obj))
-							{
-								isolateTarget = obj;
-							}
-							Profiler.EndSample();
-						}
-					}
-				}
-
-				if (isolateTarget)
-				{
-					IsolateTarget(isolateTarget);
+					_filteredObjects.Add(obj);
 				}
 			}
+		}
 
-			void RebuildFilterCollection()
+		private bool DrawEntry(Object obj)
+		{
+			float colorMultiplier;
+
+			float ColorMultiplier(GameObject go)
 			{
-				_allTags = _activeProvider.GetAllTags();
-
-				_filteredObjects.Clear();
-				foreach (var obj in _activeProvider.GetObjects(_activeTags.ToList(), _tagFilterMode))
-				{
-					if (obj)
-					{
-						_filteredObjects.Add(obj);
-					}
-				}
+				return go.activeInHierarchy ? 1 : .5f;
 			}
 
-			bool DrawEntry(Object obj)
+			switch (obj)
 			{
-				float colorMultiplier;
-
-				float ColorMultiplier(GameObject go)
-				{
-					return go.activeInHierarchy ? 1 : .5f;
-				}
-				switch (obj)
-				{
-					case GameObject go:
-						colorMultiplier = ColorMultiplier(go);
-						break;
-					case Component comp:
-						colorMultiplier = ColorMultiplier(comp.gameObject);
-						break;
-					default:
-						colorMultiplier = 1f;
-						break;
-				}
-
-				using (new GUIColorScope(GetSeededColor(obj.name, colorMultiplier)))
-				{
-					return GUILayout.Button(obj.name, styles.miniButtonLeftAlign);
-				}
+				case GameObject go:
+					colorMultiplier = ColorMultiplier(go);
+					break;
+				case Component comp:
+					colorMultiplier = ColorMultiplier(comp.gameObject);
+					break;
+				default:
+					colorMultiplier = 1f;
+					break;
 			}
 
-			Color GetSeededColor(string text, float baseMultiplier = 1f)
+			using (new GUIColorScope(GetSeededColor(obj.name, colorMultiplier)))
 			{
-				const float strength = .3f;
-				float inverseStrength = (1 - strength) * baseMultiplier;
-				if (!_colorDataCache.TryGetValue(text, out var colorVec))
-				{
-					System.Random rnd = new System.Random(text.GetHashCode());
-					_colorDataCache[text] = colorVec = new Vector3(rnd.Next(255), rnd.Next(255), rnd.Next(255)).normalized * strength;
-				}
+				return GUILayout.Button(obj.name, styles.miniButtonLeftAlign);
+			}
+		}
 
-				return new Color(inverseStrength + colorVec.x, inverseStrength + colorVec.y, inverseStrength + colorVec.z);
+		private Color GetSeededColor(string text, float baseMultiplier = 1f)
+		{
+			const float strength = .3f;
+			float inverseStrength = (1 - strength) * baseMultiplier;
+			if (!_colorDataCache.TryGetValue(text, out var colorVec))
+			{
+				Random rnd = new Random(text.GetHashCode());
+				_colorDataCache[text] = colorVec = new Vector3(rnd.Next(255), rnd.Next(255), rnd.Next(255)).normalized * strength;
 			}
 
-			void IsolateTarget(Object target)
-			{
-				GameObject isolateGo;
-				switch (target)
-				{
-					case GameObject go:
-						isolateGo = go;
-						break;
-					case Component component:
-						isolateGo = component.gameObject;
-						break;
-					default:
-						Debug.LogWarning($"Unable to isolate type '{target.GetType()}'", target);
-						return;
-				}
+			return new Color(inverseStrength + colorVec.x, inverseStrength + colorVec.y, inverseStrength + colorVec.z);
+		}
 
-				SceneVisibilityManager.instance.Isolate(isolateGo, true);
-				Selection.activeObject = target;
+		private void IsolateTarget(Object target)
+		{
+			GameObject isolateGo;
+			switch (target)
+			{
+				case GameObject go:
+					isolateGo = go;
+					break;
+				case Component component:
+					isolateGo = component.gameObject;
+					break;
+				default:
+					Debug.LogWarning($"Unable to isolate type '{target.GetType()}'", target);
+					return;
 			}
+
+			SceneVisibilityManager.instance.Isolate(isolateGo, true);
+			Selection.activeObject = target;
 		}
 
 		private readonly Dictionary<string, Vector3> _colorDataCache = new Dictionary<string, Vector3>();
@@ -262,10 +262,11 @@
 		private class GUIColorScope : GUI.Scope
 		{
 			private readonly Color _existingColor;
+
 			public GUIColorScope(Color color)
 			{
 				_existingColor = GUI.color;
-				GUI.color = color;
+				GUI.color      = color;
 			}
 
 			protected override void CloseScope()
