@@ -6,17 +6,20 @@ namespace SceneNavigator
 
 	internal class SceneNavigatorProvider : ISceneNavigatorProvider, ISceneNavigatorRegistration
 	{
-		private readonly Dictionary<string, HashSet<Object>> _collection = new Dictionary<string, HashSet<Object>>();
+		private readonly Dictionary<Object, SceneObjectMetaData> _metaData = new Dictionary<Object, SceneObjectMetaData>();
+		private readonly Dictionary<string,int> _allTags = new Dictionary<string, int>();
 
 		public void Register(Object obj, string tag = "(default)")
 		{
-			if (!_collection.TryGetValue(tag, out var coll))
+			_metaData[obj] = new SceneObjectMetaData(obj, tag);
+
+			if (_allTags.TryGetValue(tag, out var count))
 			{
-				_collection[tag] = new HashSet<Object> {obj};
+				_allTags[tag] = count + 1;
 			}
 			else
 			{
-				coll.Add(obj);
+				_allTags[tag] = 1;
 			}
 
 			onCollectionChanged?.Invoke();
@@ -24,75 +27,69 @@ namespace SceneNavigator
 
 		public void Register(Object obj, params string[] tags)
 		{
+			_metaData[obj] = new SceneObjectMetaData(obj, tags);
 			foreach (var tag in tags)
 			{
-				Register(obj, tag);
-			}
-		}
-
-		private readonly List<string> _pendingDeletedTags = new List<string>();
-
-		public void Deregister(Object obj)
-		{
-			foreach (var pair in _collection)
-			{
-				if (pair.Value.Remove(obj) && pair.Value.Count == 0)
+				if (_allTags.TryGetValue(tag, out var count))
 				{
-					_pendingDeletedTags.Add(pair.Key);
+					_allTags[tag] = count + 1;
+				}
+				else
+				{
+					_allTags[tag] = 1;
 				}
 			}
-
-			foreach (var tag in _pendingDeletedTags)
-			{
-				_collection.Remove(tag);
-			}
-
-			_pendingDeletedTags.Clear();
 
 			onCollectionChanged?.Invoke();
 		}
 
-		public ICollection<string> GetAllTags()
-		{
-			return _collection.Keys;
-		}
 
-		private readonly HashSet<Object> _objectsBuffer = new HashSet<Object>();
-
-		public IEnumerable<Object> GetObjects(IList<string> tags, SceneNavigatorFilterMode tagFilterMode)
+		public void Deregister(Object obj)
 		{
-			_objectsBuffer.Clear();
-			if (tags.Count == 0)
+			if(_metaData.TryGetValue(obj, out var data))
 			{
-				return _objectsBuffer;
+				foreach (var tag in data.tags)
+				{
+					var val = _allTags[tag]--;
+					if (val == 0)
+					{
+						_allTags.Remove(tag);
+					}
+				}
+				_metaData.Remove(obj);
 			}
 
+			onCollectionChanged?.Invoke();
+		}
+
+		public IReadOnlyDictionary<string, int> tagData => _allTags;
+
+		public IEnumerable<SceneObjectMetaData> GetObjects(HashSet<string> tags, SceneNavigatorFilterMode tagFilterMode)
+		{
 			switch (tagFilterMode)
 			{
 				case SceneNavigatorFilterMode.MatchAnyTag:
-					foreach (var tag in tags)
+					foreach (var val in _metaData.Values)
 					{
-						foreach (var o in _collection[tag])
+						if (val.tags.Overlaps(tags) && val.targetObject != null)
 						{
-							_objectsBuffer.Add(o);
+							yield return val;
 						}
 					}
 					break;
 				case SceneNavigatorFilterMode.MatchAllTags:
-					foreach (var o in _collection[tags[0]])
+
+					foreach (var val in _metaData.Values)
 					{
-						_objectsBuffer.Add(o);
-					}
-					for (int i = 1; i < tags.Count; i++)
-					{
-						_objectsBuffer.IntersectWith(_collection[tags[i]]);
+						if (val.tags.IsSupersetOf(tags) && val.targetObject != null)
+						{
+							yield return val;
+						}
 					}
 					break;
 				default:
 					throw new ArgumentOutOfRangeException(nameof(tagFilterMode), tagFilterMode, null);
 			}
-
-			return _objectsBuffer;
 		}
 
 		public event Action onCollectionChanged;

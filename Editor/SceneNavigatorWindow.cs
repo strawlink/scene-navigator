@@ -15,7 +15,7 @@
 			GetWindow<SceneNavigatorWindow>("Scene Navigator");
 		}
 
-		private readonly HashSet<Object> _filteredObjects = new HashSet<Object>();
+		private readonly SortedSet<SceneObjectMetaData> _filteredObjects = new SortedSet<SceneObjectMetaData>();
 		private bool _rebuildFilter = false;
 
 		private ISceneNavigatorProvider _activeProvider;
@@ -59,7 +59,7 @@
 		private static Styles _styles;
 		private static Styles styles => _styles ?? (_styles = new Styles());
 
-		private ICollection<string> _allTags;
+		private IReadOnlyDictionary<string,int> _tagData;
 		private readonly HashSet<string> _activeTags = new HashSet<string>();
 
 		private SceneNavigatorFilterMode _tagFilterMode = SceneNavigatorFilterMode.MatchAnyTag;
@@ -68,11 +68,9 @@
 			Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(OnGUI)}");
 			//TODO: Save active tags to editorprefs
 
-			if (_filteredObjects.Any(x=> x == null) || _rebuildFilter)
+			if (_filteredObjects.Any(x=> x.targetObject == null) || _rebuildFilter)
 			{
-				Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(RebuildFilterCollection)}");
 				RebuildFilterCollection();
-				Profiler.EndSample();
 
 				_rebuildFilter = false;
 			}
@@ -103,23 +101,23 @@
 			{
 				_tagsScrollPosition = scrollScope.scrollPosition;
 
-				if (_allTags.Count > 0)
+				if (_tagData.Count > 0)
 				{
-					foreach (var tag in _allTags)
+					foreach (var tag in _tagData)
 					{
-						bool contains = _activeTags.Contains(tag);
+						bool contains = _activeTags.Contains(tag.Key);
 
-						using (new GUIColorScope(GetSeededColor(tag, contains ? 1f : .5f)))
+						using (new GUIColorScope(GetSeededColor(tag.Key, contains ? 1f : .5f)))
 						{
-							var newContains = GUILayout.Toggle(contains, tag, styles.miniButtonLeftAlign);
+							var newContains = GUILayout.Toggle(contains, $"[{tag.Value}] {tag.Key}", styles.miniButtonLeftAlign);
 							if (contains && !newContains)
 							{
-								_activeTags.Remove(tag);
+								_activeTags.Remove(tag.Key);
 								_rebuildFilter = true;
 							}
 							else if (!contains && newContains)
 							{
-								_activeTags.Add(tag);
+								_activeTags.Add(tag.Key);
 								_rebuildFilter = true;
 							}
 						}
@@ -151,7 +149,7 @@
 
 		private void DrawObjects()
 		{
-			Object isolateTarget = default;
+			SceneObjectMetaData isolateTarget = default;
 
 			using (var scrollScope = new EditorGUILayout.ScrollViewScope(_objectsScrollPosition, styles.box))
 			{
@@ -176,27 +174,27 @@
 				}
 			}
 
-			if (isolateTarget)
+			if (isolateTarget != default)
 			{
-				IsolateTarget(isolateTarget);
+				IsolateTarget(isolateTarget.targetObject);
 			}
 		}
 
 		private void RebuildFilterCollection()
 		{
-			_allTags = _activeProvider.GetAllTags();
+			Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(RebuildFilterCollection)}");
+
+			_tagData = _activeProvider.tagData;
 
 			_filteredObjects.Clear();
-			foreach (var obj in _activeProvider.GetObjects(_activeTags.ToList(), _tagFilterMode))
+			foreach (var obj in _activeProvider.GetObjects(_activeTags, _tagFilterMode))
 			{
-				if (obj)
-				{
-					_filteredObjects.Add(obj);
-				}
+				_filteredObjects.Add(obj);
 			}
+			Profiler.EndSample();
 		}
 
-		private bool DrawEntry(Object obj)
+		private bool DrawEntry(SceneObjectMetaData obj)
 		{
 			float colorMultiplier;
 
@@ -205,7 +203,7 @@
 				return go.activeInHierarchy ? 1 : .5f;
 			}
 
-			switch (obj)
+			switch (obj.targetObject)
 			{
 				case GameObject go:
 					colorMultiplier = ColorMultiplier(go);

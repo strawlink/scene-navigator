@@ -2,13 +2,12 @@ namespace SceneNavigator
 {
 	using System;
 	using System.Collections.Generic;
-	using Object = UnityEngine.Object;
 
 	public interface ISceneNavigatorProvider
 	{
-		ICollection<string> GetAllTags();
+		IReadOnlyDictionary<string,int> tagData { get; }
 
-		IEnumerable<Object> GetObjects(IList<string> tags, SceneNavigatorFilterMode tagFilterMode);
+		IEnumerable<SceneObjectMetaData> GetObjects(HashSet<string> tags, SceneNavigatorFilterMode tagFilterMode);
 
 		event Action onCollectionChanged;
 	}
