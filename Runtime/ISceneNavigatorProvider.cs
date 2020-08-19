@@ -6,9 +6,9 @@ namespace SceneNavigator
 
 	public interface ISceneNavigatorProvider
 	{
-		IEnumerable<string> GetAllTags();
+		ICollection<string> GetAllTags();
 
-		IEnumerable<Object> GetObjects(string tag);
+		IEnumerable<Object> GetObjects(IList<string> tags, SceneNavigatorFilterMode tagFilterMode);
 
 		event Action onCollectionChanged;
 	}

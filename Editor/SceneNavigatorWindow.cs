@@ -1,15 +1,16 @@
 ﻿namespace SceneNavigator
 {
+	using System;
 	using System.Collections.Generic;
 	using System.Linq;
 	using UnityEditor;
 	using UnityEngine;
+	using UnityEngine.Profiling;
 	using Debug = UnityEngine.Debug;
 	using Object = UnityEngine.Object;
 
-	public class SceneNavigatorWindow : EditorWindow
+	internal class SceneNavigatorWindow : EditorWindow
 	{
-
 		[MenuItem("Window/General/Scene Navigator")]
 		public static void OpenWindow()
 		{
@@ -41,12 +42,6 @@
 			Repaint();
 		}
 
-		private const string TagsTab = "Tags";
-		private const string ObjectTab = "Objects";
-
-		private readonly string[] _tabs = new[] {TagsTab, ObjectTab};
-		private string _activeTab = ObjectTab;
-
 		private class Styles
 		{
 			public readonly GUIStyle miniButtonLeftAlign = new GUIStyle(EditorStyles.miniButton)
@@ -54,79 +49,70 @@
 				alignment = TextAnchor.MiddleLeft,
 				margin = new RectOffset(0,0,0,0)
 			};
-			public readonly GUIStyle tagsToggle = new GUIStyle(EditorStyles.miniButton)
-			{
 
-				alignment = TextAnchor.MiddleLeft,
-				margin = new RectOffset(0,0,0,0)
+			public readonly GUIStyle centeredGreyMiniLabel = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
+			{
+				alignment = TextAnchor.MiddleCenter
 			};
+
+			public readonly GUIStyle box = new GUIStyle("Box");
 		}
 
 		private static Styles _styles;
 		private static Styles styles => _styles ?? (_styles = new Styles());
 
-		private IEnumerable<string> _allTags;
+		private ICollection<string> _allTags;
 		private readonly HashSet<string> _activeTags = new HashSet<string>();
+
+		private SceneNavigatorFilterMode _tagFilterMode = SceneNavigatorFilterMode.MatchAnyTag;
 		private void OnGUI()
 		{
-			//TODO: Save filter in editorprefs
-
-			// using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
-			// {
-			// 	foreach (var tab in _tabs)
-			// 	{
-			// 		if (GUILayout.Toggle(tab == _activeTab, tab, EditorStyles.toolbarButton))
-			// 		{
-			// 			_activeTab = tab;
-			// 			_rebuildFilter = true;
-			// 		}
-			// 	}
-			// }
+			Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(OnGUI)}");
+			//TODO: Save active tags to editorprefs
 
 			if (_filteredObjects.Any(x=> x == null) || _rebuildFilter)
 			{
+				Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(RebuildFilterCollection)}");
 				RebuildFilterCollection();
+				Profiler.EndSample();
+
 				_rebuildFilter = false;
 			}
 
-			// switch (_activeTab)
-			// {
-			// 	case TagsTab:
-			// 		break;
-			// 	case ObjectTab:
-			// 		break;
-			// }
-
-			using (new EditorGUILayout.HorizontalScope())
+			using (new GUILayout.HorizontalScope())
 			{
-				using (new EditorGUILayout.VerticalScope(GUILayout.MinWidth(100)))
+				using (new EditorGUILayout.VerticalScope(GUILayout.Width(position.width*.25f)))
 				{
-					DrawTagsTab();
+					Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(DrawTags)}");
+					DrawTags();
+					Profiler.EndSample();
 				}
 				using (new EditorGUILayout.VerticalScope(GUILayout.ExpandWidth(true)))
 				{
-					DrawObjectsTab();
+					Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(DrawObjects)}");
+					DrawObjects();
+					Profiler.EndSample();
 				}
 			}
 
-			void DrawTagsTab()
+			Profiler.EndSample();
+
+			void DrawTags()
 			{
 				EditorGUILayout.LabelField("Tags", EditorStyles.centeredGreyMiniLabel);
-				using (var scrollScope = new EditorGUILayout.ScrollViewScope(_tagsScrollPosition, "Box", GUILayout.ExpandHeight(true)))
+				using (var scrollScope = new GUILayout.ScrollViewScope(_tagsScrollPosition, styles.box, GUILayout.ExpandHeight(true)))
 				{
 					_tagsScrollPosition = scrollScope.scrollPosition;
 
-					if (_allTags.Any())
+					if (_allTags.Count > 0)
 					{
 						foreach (var tag in _allTags)
 						{
-							var col = GUI.color;
 							bool contains = _activeTags.Contains(tag);
-							GUI.color = GetSeededColor(tag, contains ? 1f : .5f);
-							// using (new EditorGUILayout.HorizontalScope())
-							// {
 
-								var newContains = GUILayout.Toggle(contains, tag, styles.tagsToggle);
+							using (new GUIColorScope(GetSeededColor(tag, contains ? 1f : .5f)))
+							{
+								var newContains = GUILayout.Toggle(contains, tag, styles.miniButtonLeftAlign);
 								if (contains && !newContains)
 								{
 									_activeTags.Remove(tag);
@@ -137,38 +123,55 @@
 									_activeTags.Add(tag);
 									_rebuildFilter = true;
 								}
-							// }
-
-							GUI.color = col;
+							}
 						}
 					}
 					else
 					{
-						EditorGUILayout.LabelField("(empty)", EditorStyles.centeredGreyMiniLabel);
+						GUILayout.Label("(empty)", styles.centeredGreyMiniLabel);
+					}
+				}
+
+				using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+				{
+					DrawToggle(SceneNavigatorFilterMode.MatchAnyTag, "Match Any");
+					DrawToggle(SceneNavigatorFilterMode.MatchAllTags, "Match All");
+
+					void DrawToggle(SceneNavigatorFilterMode filterMode, string text)
+					{
+						bool val = _tagFilterMode == filterMode;
+						bool newVal = GUILayout.Toggle(val, text, EditorStyles.toolbarButton);
+						if (!val && newVal)
+						{
+							_tagFilterMode = filterMode;
+							_rebuildFilter = true;
+						}
 					}
 				}
 			}
 
-			void DrawObjectsTab()
+			void DrawObjects()
 			{
 				Object isolateTarget = default;
 
-				using (var scrollScope = new EditorGUILayout.ScrollViewScope(_objectsScrollPosition, "Box", GUILayout.ExpandHeight(true)))
+				using (var scrollScope = new EditorGUILayout.ScrollViewScope(_objectsScrollPosition, styles.box, GUILayout.ExpandHeight(true)))
 				{
 					_objectsScrollPosition = scrollScope.scrollPosition;
 
 					if (_filteredObjects.Count == 0)
 					{
-						EditorGUILayout.LabelField("(empty)", EditorStyles.centeredGreyMiniLabel);
+						GUILayout.Label("(empty)", styles.centeredGreyMiniLabel);
 					}
 					else
 					{
 						foreach (var obj in _filteredObjects)
 						{
+							Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(DrawEntry)}");
 							if (DrawEntry(obj))
 							{
 								isolateTarget = obj;
 							}
+							Profiler.EndSample();
 						}
 					}
 				}
@@ -179,33 +182,27 @@
 				}
 			}
 
-			// DrawFooter();
-
 			void RebuildFilterCollection()
 			{
 				_allTags = _activeProvider.GetAllTags();
 
 				_filteredObjects.Clear();
-				foreach (var tag in _activeTags)
+				foreach (var obj in _activeProvider.GetObjects(_activeTags.ToList(), _tagFilterMode))
 				{
-					foreach (var obj in _activeProvider.GetObjects(tag))
+					if (obj)
 					{
-						if (obj)
-						{
-							_filteredObjects.Add(obj);
-						}
+						_filteredObjects.Add(obj);
 					}
 				}
 			}
 
 			bool DrawEntry(Object obj)
 			{
-				var col = GUI.color;
 				float colorMultiplier;
 
 				float ColorMultiplier(GameObject go)
 				{
-					return go.activeInHierarchy ? 1 : go.activeSelf ? .7f : .5f;
+					return go.activeInHierarchy ? 1 : .5f;
 				}
 				switch (obj)
 				{
@@ -219,28 +216,24 @@
 						colorMultiplier = 1f;
 						break;
 				}
-				GUI.color = GetSeededColor(obj.name, colorMultiplier);
-				bool clicked = GUILayout.Button(obj.name, styles.miniButtonLeftAlign);
-				GUI.color = col;
-				return clicked;
-			}
 
-			// void DrawFooter()
-			// {
-			// 	using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
-			// 	{
-			// 		EditorGUILayout.LabelField(_activeProvider.GetType().Name, EditorStyles.centeredGreyMiniLabel);
-			// 		GUILayout.Button("Rebuild", EditorStyles.miniButton);
-			// 	}
-			// }
+				using (new GUIColorScope(GetSeededColor(obj.name, colorMultiplier)))
+				{
+					return GUILayout.Button(obj.name, styles.miniButtonLeftAlign);
+				}
+			}
 
 			Color GetSeededColor(string text, float baseMultiplier = 1f)
 			{
-				System.Random rnd = new System.Random(text.GetHashCode());
 				const float strength = .3f;
 				float inverseStrength = (1 - strength) * baseMultiplier;
-				Vector3 v3 = new Vector3(rnd.Next(255), rnd.Next(255), rnd.Next(255)).normalized * strength;
-				return new Color(inverseStrength + v3.x, inverseStrength + v3.y, inverseStrength + v3.z);
+				if (!_colorDataCache.TryGetValue(text, out var colorVec))
+				{
+					System.Random rnd = new System.Random(text.GetHashCode());
+					_colorDataCache[text] = colorVec = new Vector3(rnd.Next(255), rnd.Next(255), rnd.Next(255)).normalized * strength;
+				}
+
+				return new Color(inverseStrength + colorVec.x, inverseStrength + colorVec.y, inverseStrength + colorVec.z);
 			}
 
 			void IsolateTarget(Object target)
@@ -261,6 +254,23 @@
 
 				SceneVisibilityManager.instance.Isolate(isolateGo, true);
 				Selection.activeObject = target;
+			}
+		}
+
+		private readonly Dictionary<string, Vector3> _colorDataCache = new Dictionary<string, Vector3>();
+
+		private class GUIColorScope : GUI.Scope
+		{
+			private readonly Color _existingColor;
+			public GUIColorScope(Color color)
+			{
+				_existingColor = GUI.color;
+				GUI.color = color;
+			}
+
+			protected override void CloseScope()
+			{
+				GUI.color = _existingColor;
 			}
 		}
 	}

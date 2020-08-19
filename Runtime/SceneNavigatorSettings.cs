@@ -1,5 +1,8 @@
 namespace SceneNavigator
 {
+	using JetBrains.Annotations;
+
+	[PublicAPI]
 	public static class SceneNavigatorSettings
 	{
 		public static ISceneNavigatorProvider     provider     { get; set; }

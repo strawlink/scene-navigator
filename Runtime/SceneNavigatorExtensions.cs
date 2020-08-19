@@ -4,6 +4,7 @@ namespace SceneNavigator
 	using JetBrains.Annotations;
 	using UnityEngine;
 
+	[PublicAPI]
 	public static class SceneNavigatorExtensions
 	{
 		private const string ConditionalDefine = "UNITY_EDITOR";
