@@ -84,6 +84,7 @@ namespace SceneNavigator
 			onCollectionChanged?.Invoke();
 		}
 
+		public string providerName { get; } = "Default Provider";
 		public IReadOnlyDictionary<string, int> tagData => _allTags;
 
 		private readonly List<Object> _pendingDeletion = new List<Object>();

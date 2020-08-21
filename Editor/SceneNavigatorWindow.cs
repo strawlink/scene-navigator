@@ -82,6 +82,7 @@
 		private void OnProviderChanged(ISceneNavigatorProvider newProvider)
 		{
 			_activeProvider.onCollectionChanged -= SetRebuildFilter;
+			_activeProvider = newProvider;
 			newProvider.onCollectionChanged += SetRebuildFilter;
 			SetRebuildFilter();
 		}
@@ -139,14 +140,26 @@
 
 			using (new GUILayout.HorizontalScope())
 			{
-				using (new EditorGUILayout.VerticalScope(GUILayout.Width(position.width*.25f)))
+				using (new EditorGUILayout.VerticalScope(GUILayout.MinWidth(100),GUILayout.MaxWidth(200)))
 				{
+					GUILayout.Label("Tags", styles.centeredGreyMiniLabel,  GUILayout.Height(20));
+
 					Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(DrawTags)}");
 					DrawTags();
 					Profiler.EndSample();
 				}
-				using (new EditorGUILayout.VerticalScope(GUILayout.ExpandWidth(true)))
+				using (new EditorGUILayout.VerticalScope(GUILayout.MinWidth(100),GUILayout.MaxWidth(position.width), GUILayout.ExpandWidth(true)))
 				{
+					using (new EditorGUILayout.HorizontalScope())
+					{
+						GUILayout.Label(_activeProvider.providerName, styles.centeredGreyMiniLabel, GUILayout.Height(20));
+						if (GUILayout.Button("Refresh", EditorStyles.miniButton, GUILayout.ExpandWidth(false)))
+						{
+							SetRebuildFilter();
+							ShowNotification(new GUIContent("Refreshed.."), 1f);
+						}
+					}
+
 					Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(DrawObjects)}");
 					DrawObjects();
 					Profiler.EndSample();
@@ -158,7 +171,6 @@
 
 		private void DrawTags()
 		{
-			EditorGUILayout.LabelField("Tags", EditorStyles.centeredGreyMiniLabel);
 			using (var scrollScope = new GUILayout.ScrollViewScope(_tagsScrollPosition, styles.box))
 			{
 				_tagsScrollPosition = scrollScope.scrollPosition;
@@ -256,7 +268,7 @@
 			_filteredObjects.Clear();
 
 			// ActiveTags may contain old data => make sure we only get the tags that are valid
-			var tags = _activeTags.Where(_tagData.ContainsKey);
+			var tags = _activeTags.Where(_tagData.ContainsKey).ToArray();
 			foreach (var obj in FilterObjects(_activeProvider.GetObjects(), tags, _tagFilterMode))
 			{
 				_filteredObjects.Add(obj);
@@ -265,14 +277,19 @@
 		}
 
 		[Pure]
-		private IEnumerable<SceneObjectMetaData> FilterObjects(IEnumerable<SceneObjectMetaData> objects, IEnumerable<string> tags, TagFilterMode tagFilterMode)
+		private IEnumerable<SceneObjectMetaData> FilterObjects(IEnumerable<SceneObjectMetaData> objects, string[] tags, TagFilterMode tagFilterMode)
 		{
+			if (tags.Length == 0)
+			{
+				return objects;
+			}
+
 			switch (tagFilterMode)
 			{
 				case TagFilterMode.MatchAnyTag:
 					return objects.Where(x => x.tags.Overlaps(tags));
 				case TagFilterMode.MatchAllTags:
-					return objects.Where(x => x.tags.IsSubsetOf(tags));
+					return objects.Where(x => x.tags.IsSupersetOf(tags));
 				default:
 					throw new ArgumentOutOfRangeException(nameof(tagFilterMode), tagFilterMode, null);
 			}

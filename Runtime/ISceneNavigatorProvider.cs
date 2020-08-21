@@ -5,6 +5,8 @@ namespace SceneNavigator
 
 	public interface ISceneNavigatorProvider
 	{
+		string providerName { get; }
+
 		IReadOnlyDictionary<string,int> tagData { get; }
 
 		IEnumerable<SceneObjectMetaData> GetObjects();
