@@ -1,14 +1,55 @@
 ﻿namespace SceneNavigator
 {
+	using System;
 	using System.Collections.Generic;
 	using System.Linq;
+	using JetBrains.Annotations;
 	using UnityEditor;
 	using UnityEngine;
 	using UnityEngine.Profiling;
+	using Object = UnityEngine.Object;
 	using Random = System.Random;
 
 	internal class SceneNavigatorWindow : EditorWindow, ISerializationCallbackReceiver
 	{
+		private enum TagFilterMode
+		{
+			MatchAnyTag,
+			MatchAllTags
+		}
+
+		private class Styles
+		{
+			public readonly GUIStyle miniButtonLeftAlign = new GUIStyle(EditorStyles.miniButton)
+			{
+				alignment = TextAnchor.MiddleLeft,
+				margin    = new RectOffset(0, 0, 0, 0)
+			};
+
+			public readonly GUIStyle centeredGreyMiniLabel = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
+			{
+				alignment = TextAnchor.MiddleCenter
+			};
+
+			public readonly GUIStyle box = new GUIStyle("Box");
+		}
+
+		private class GUIColorScope : GUI.Scope
+		{
+			private readonly Color _existingColor;
+
+			public GUIColorScope(Color color)
+			{
+				_existingColor = GUI.color;
+				GUI.color      = color;
+			}
+
+			protected override void CloseScope()
+			{
+				GUI.color = _existingColor;
+			}
+		}
+
 		[MenuItem("Window/General/Scene Navigator")]
 		public static void OpenWindow()
 		{
@@ -51,22 +92,6 @@
 			Repaint();
 		}
 
-		private class Styles
-		{
-			public readonly GUIStyle miniButtonLeftAlign = new GUIStyle(EditorStyles.miniButton)
-			{
-				alignment = TextAnchor.MiddleLeft,
-				margin = new RectOffset(0,0,0,0)
-			};
-
-			public readonly GUIStyle centeredGreyMiniLabel = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
-			{
-				alignment = TextAnchor.MiddleCenter
-			};
-
-			public readonly GUIStyle box = new GUIStyle("Box");
-		}
-
 		private static Styles _styles;
 		private static Styles styles => _styles ?? (_styles = new Styles());
 
@@ -100,7 +125,7 @@
 			}
 		}
 
-		private SceneNavigatorFilterMode _tagFilterMode = SceneNavigatorFilterMode.MatchAnyTag;
+		private TagFilterMode _tagFilterMode = TagFilterMode.MatchAnyTag;
 		private void OnGUI()
 		{
 			Profiler.BeginSample($"{nameof(SceneNavigatorWindow)}.{nameof(OnGUI)}");
@@ -173,10 +198,10 @@
 
 			using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
 			{
-				DrawToggle(SceneNavigatorFilterMode.MatchAnyTag,  "Match Any");
-				DrawToggle(SceneNavigatorFilterMode.MatchAllTags, "Match All");
+				DrawToggle(TagFilterMode.MatchAnyTag,  "Match Any");
+				DrawToggle(TagFilterMode.MatchAllTags, "Match All");
 
-				void DrawToggle(SceneNavigatorFilterMode filterMode, string text)
+				void DrawToggle(TagFilterMode filterMode, string text)
 				{
 					bool val    = _tagFilterMode == filterMode;
 					bool newVal = GUILayout.Toggle(val, text, EditorStyles.toolbarButton);
@@ -231,11 +256,40 @@
 			_filteredObjects.Clear();
 
 			// ActiveTags may contain old data => make sure we only get the tags that are valid
-			foreach (var obj in _activeProvider.GetObjects(_activeTags.Where(_tagData.ContainsKey), _tagFilterMode))
+			var tags = _activeTags.Where(_tagData.ContainsKey).ToArray();
+			foreach (var obj in FilterObjects(_activeProvider.GetObjects(), tags, _tagFilterMode))
 			{
 				_filteredObjects.Add(obj);
 			}
 			Profiler.EndSample();
+		}
+
+		[Pure]
+		private IEnumerable<SceneObjectMetaData> FilterObjects(IEnumerable<SceneObjectMetaData> objects, string[] tags, TagFilterMode tagFilterMode)
+		{
+			switch (tagFilterMode)
+			{
+				case TagFilterMode.MatchAnyTag:
+					foreach (var obj in objects)
+					{
+						if (obj.tags.Overlaps(tags))
+						{
+							yield return obj;
+						}
+					}
+					break;
+				case TagFilterMode.MatchAllTags:
+					foreach (var obj in objects)
+					{
+						if (obj.tags.IsSupersetOf(tags))
+						{
+							yield return obj;
+						}
+					}
+					break;
+				default:
+					throw new ArgumentOutOfRangeException(nameof(tagFilterMode), tagFilterMode, null);
+			}
 		}
 
 		private bool DrawEntry(SceneObjectMetaData obj)
@@ -300,22 +354,6 @@
 		}
 
 		private readonly Dictionary<string, Vector3> _colorDataCache = new Dictionary<string, Vector3>();
-
-		private class GUIColorScope : GUI.Scope
-		{
-			private readonly Color _existingColor;
-
-			public GUIColorScope(Color color)
-			{
-				_existingColor = GUI.color;
-				GUI.color      = color;
-			}
-
-			protected override void CloseScope()
-			{
-				GUI.color = _existingColor;
-			}
-		}
 
 		public void OnBeforeSerialize()
 		{

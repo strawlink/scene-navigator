@@ -2,7 +2,6 @@ namespace SceneNavigator
 {
 	using System;
 	using System.Collections.Generic;
-	using System.Linq;
 	using Object = UnityEngine.Object;
 
 	internal class SceneNavigatorProvider : ISceneNavigatorProvider, ISceneNavigatorRegistration
@@ -81,43 +80,16 @@ namespace SceneNavigator
 		public IReadOnlyDictionary<string, int> tagData => _allTags;
 
 		private readonly List<Object> _pendingDeletion = new List<Object>();
-		public IEnumerable<SceneObjectMetaData> GetObjects(IEnumerable<string> tags, SceneNavigatorFilterMode tagFilterMode)
+		public IEnumerable<SceneObjectMetaData> GetObjects()
 		{
-			var tagsArr = tags as string[] ?? tags.ToArray();
-			switch (tagFilterMode)
+			foreach (var pair in _metaData)
 			{
-				case SceneNavigatorFilterMode.MatchAnyTag:
-					foreach (var pair in _metaData)
-					{
-						if(pair.Value.targetObject == null)
-						{
-							_pendingDeletion.Add(pair.Key);
-							continue;
-						}
-
-						if (pair.Value.tags.Overlaps(tagsArr))
-						{
-							yield return pair.Value;
-						}
-					}
-					break;
-				case SceneNavigatorFilterMode.MatchAllTags:
-					foreach (var pair in _metaData)
-					{
-						if(pair.Value.targetObject == null)
-						{
-							_pendingDeletion.Add(pair.Key);
-							continue;
-						}
-
-						if (pair.Value.tags.IsSupersetOf(tagsArr))
-						{
-							yield return pair.Value;
-						}
-					}
-					break;
-				default:
-					throw new ArgumentOutOfRangeException(nameof(tagFilterMode), tagFilterMode, null);
+				if(pair.Value.targetObject == null)
+				{
+					_pendingDeletion.Add(pair.Key);
+					continue;
+				}
+				yield return pair.Value;
 			}
 
 			foreach (var obj in _pendingDeletion)

@@ -7,7 +7,7 @@ namespace SceneNavigator
 	{
 		IReadOnlyDictionary<string,int> tagData { get; }
 
-		IEnumerable<SceneObjectMetaData> GetObjects(IEnumerable<string> tags, SceneNavigatorFilterMode tagFilterMode);
+		IEnumerable<SceneObjectMetaData> GetObjects();
 
 		event Action onCollectionChanged;
 	}

@@ -1,6 +1,5 @@
 namespace SceneNavigator
 {
-	using System;
 	using JetBrains.Annotations;
 
 	[PublicAPI]
