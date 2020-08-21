@@ -256,7 +256,7 @@
 			_filteredObjects.Clear();
 
 			// ActiveTags may contain old data => make sure we only get the tags that are valid
-			var tags = _activeTags.Where(_tagData.ContainsKey).ToArray();
+			var tags = _activeTags.Where(_tagData.ContainsKey);
 			foreach (var obj in FilterObjects(_activeProvider.GetObjects(), tags, _tagFilterMode))
 			{
 				_filteredObjects.Add(obj);
@@ -265,28 +265,14 @@
 		}
 
 		[Pure]
-		private IEnumerable<SceneObjectMetaData> FilterObjects(IEnumerable<SceneObjectMetaData> objects, string[] tags, TagFilterMode tagFilterMode)
+		private IEnumerable<SceneObjectMetaData> FilterObjects(IEnumerable<SceneObjectMetaData> objects, IEnumerable<string> tags, TagFilterMode tagFilterMode)
 		{
 			switch (tagFilterMode)
 			{
 				case TagFilterMode.MatchAnyTag:
-					foreach (var obj in objects)
-					{
-						if (obj.tags.Overlaps(tags))
-						{
-							yield return obj;
-						}
-					}
-					break;
+					return objects.Where(x => x.tags.Overlaps(tags));
 				case TagFilterMode.MatchAllTags:
-					foreach (var obj in objects)
-					{
-						if (obj.tags.IsSupersetOf(tags))
-						{
-							yield return obj;
-						}
-					}
-					break;
+					return objects.Where(x => x.tags.IsSubsetOf(tags));
 				default:
 					throw new ArgumentOutOfRangeException(nameof(tagFilterMode), tagFilterMode, null);
 			}

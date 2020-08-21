@@ -11,14 +11,24 @@ namespace SceneNavigator
 
 		public void Register(Object obj, string tag = "(default)")
 		{
-			// Prevent duplicate registrations
-			if (_metaData.ContainsKey(obj))
+			if (_metaData.TryGetValue(obj, out var existingData))
 			{
+				if (existingData.tags.Add(tag))
+				{
+					IncrementTagCounter(tag);
+				}
 				return;
 			}
 
 			_metaData[obj] = new SceneObjectMetaData(obj, tag);
 
+			IncrementTagCounter(tag);
+
+			onCollectionChanged?.Invoke();
+		}
+
+		private void IncrementTagCounter(string tag)
+		{
 			if (_allTags.TryGetValue(tag, out var count))
 			{
 				_allTags[tag] = count + 1;
@@ -27,29 +37,26 @@ namespace SceneNavigator
 			{
 				_allTags[tag] = 1;
 			}
-
-			onCollectionChanged?.Invoke();
 		}
 
 		public void Register(Object obj, params string[] tags)
 		{
-			// Prevent duplicate registrations
-			if (_metaData.ContainsKey(obj))
+			if (_metaData.TryGetValue(obj, out var existingData))
 			{
+				foreach (var tag in tags)
+				{
+					if (existingData.tags.Add(tag))
+					{
+						IncrementTagCounter(tag);
+					}
+				}
 				return;
 			}
 
 			_metaData[obj] = new SceneObjectMetaData(obj, tags);
 			foreach (var tag in tags)
 			{
-				if (_allTags.TryGetValue(tag, out var count))
-				{
-					_allTags[tag] = count + 1;
-				}
-				else
-				{
-					_allTags[tag] = 1;
-				}
+				IncrementTagCounter(tag);
 			}
 
 			onCollectionChanged?.Invoke();
