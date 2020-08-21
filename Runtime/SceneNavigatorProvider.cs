@@ -2,6 +2,7 @@ namespace SceneNavigator
 {
 	using System;
 	using System.Collections.Generic;
+	using System.Linq;
 	using Object = UnityEngine.Object;
 
 	internal class SceneNavigatorProvider : ISceneNavigatorProvider, ISceneNavigatorRegistration
@@ -58,50 +59,72 @@ namespace SceneNavigator
 
 		public void Deregister(Object obj)
 		{
-			if(_metaData.TryGetValue(obj, out var data))
+			if (!_metaData.TryGetValue(obj, out var data))
 			{
-				foreach (var tag in data.tags)
-				{
-					var val = _allTags[tag]--;
-					if (val == 0)
-					{
-						_allTags.Remove(tag);
-					}
-				}
-				_metaData.Remove(obj);
+				return;
 			}
+
+			foreach (var tag in data.tags)
+			{
+				var val = _allTags[tag]--;
+				if (val == 0)
+				{
+					_allTags.Remove(tag);
+				}
+			}
+
+			_metaData.Remove(obj);
 
 			onCollectionChanged?.Invoke();
 		}
 
 		public IReadOnlyDictionary<string, int> tagData => _allTags;
 
-		public IEnumerable<SceneObjectMetaData> GetObjects(HashSet<string> tags, SceneNavigatorFilterMode tagFilterMode)
+		private readonly List<Object> _pendingDeletion = new List<Object>();
+		public IEnumerable<SceneObjectMetaData> GetObjects(IEnumerable<string> tags, SceneNavigatorFilterMode tagFilterMode)
 		{
+			var tagsArr = tags as string[] ?? tags.ToArray();
 			switch (tagFilterMode)
 			{
 				case SceneNavigatorFilterMode.MatchAnyTag:
-					foreach (var val in _metaData.Values)
+					foreach (var pair in _metaData)
 					{
-						if (val.tags.Overlaps(tags) && val.targetObject != null)
+						if(pair.Value.targetObject == null)
 						{
-							yield return val;
+							_pendingDeletion.Add(pair.Key);
+							continue;
+						}
+
+						if (pair.Value.tags.Overlaps(tagsArr))
+						{
+							yield return pair.Value;
 						}
 					}
 					break;
 				case SceneNavigatorFilterMode.MatchAllTags:
-
-					foreach (var val in _metaData.Values)
+					foreach (var pair in _metaData)
 					{
-						if (val.tags.IsSupersetOf(tags) && val.targetObject != null)
+						if(pair.Value.targetObject == null)
 						{
-							yield return val;
+							_pendingDeletion.Add(pair.Key);
+							continue;
+						}
+
+						if (pair.Value.tags.IsSupersetOf(tagsArr))
+						{
+							yield return pair.Value;
 						}
 					}
 					break;
 				default:
 					throw new ArgumentOutOfRangeException(nameof(tagFilterMode), tagFilterMode, null);
 			}
+
+			foreach (var obj in _pendingDeletion)
+			{
+				Deregister(obj);
+			}
+			_pendingDeletion.Clear();
 		}
 
 		public event Action onCollectionChanged;

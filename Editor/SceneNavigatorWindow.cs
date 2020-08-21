@@ -26,6 +26,8 @@
 		{
 			_activeProvider = SceneNavigatorSettings.provider;
 			_activeProvider.onCollectionChanged += SetRebuildFilter;
+			SceneNavigatorSettings.onProviderChanged += OnProviderChanged;
+
 			SetRebuildFilter();
 			LoadActiveTags();
 		}
@@ -33,6 +35,14 @@
 		private void OnDisable()
 		{
 			_activeProvider.onCollectionChanged -= SetRebuildFilter;
+			SceneNavigatorSettings.onProviderChanged -= OnProviderChanged;
+		}
+
+		private void OnProviderChanged(ISceneNavigatorProvider newProvider)
+		{
+			_activeProvider.onCollectionChanged -= SetRebuildFilter;
+			newProvider.onCollectionChanged += SetRebuildFilter;
+			SetRebuildFilter();
 		}
 
 		private void SetRebuildFilter()
@@ -219,7 +229,9 @@
 			_tagData = _activeProvider.tagData;
 
 			_filteredObjects.Clear();
-			foreach (var obj in _activeProvider.GetObjects(_activeTags, _tagFilterMode))
+
+			// ActiveTags may contain old data => make sure we only get the tags that are valid
+			foreach (var obj in _activeProvider.GetObjects(_activeTags.Where(_tagData.ContainsKey), _tagFilterMode))
 			{
 				_filteredObjects.Add(obj);
 			}
